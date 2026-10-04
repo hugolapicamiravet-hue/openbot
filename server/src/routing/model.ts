@@ -14,6 +14,19 @@ export function createModelCompleter(deps: {
 }): (prompt: string, signal?: AbortSignal) => Promise<string> {
   return async (prompt: string, signal?: AbortSignal) => {
     signal?.throwIfAborted();
+    if (deps.model.ollama) {
+      const result = await deps.model.ollama.doGenerate({
+        prompt: [{ role: "user", content: [{ type: "text", text: prompt }] }],
+        responseFormat: { type: "json" },
+        abortSignal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(10_000)])
+          : AbortSignal.timeout(10_000),
+      });
+      return result.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.text)
+        .join("");
+    }
     const key = await deps.resolveApiKey();
     signal?.throwIfAborted();
     if (!key) throw new Error("no model key");

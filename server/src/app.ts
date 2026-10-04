@@ -432,6 +432,7 @@ export function createApp(
        * both halves, so off means off.
        */
       generativeUi: config.generativeUi,
+      galleryUi: config.galleryUi,
       transcription: Boolean(config.transcription),
       voice: Boolean(config.voice),
       /*

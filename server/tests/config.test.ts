@@ -1089,3 +1089,18 @@ test("a Composio key is read when set and absent when not", () => {
       .composioApiKey,
   ).toBe("ak_example");
 });
+
+describe("optional local inference capabilities", () => {
+  test("titles and gallery default on and can be disabled independently", () => {
+    const defaults = loadConfig(baseEnvironment);
+    expect(defaults.generateThreadNames).toBe(true);
+    expect(defaults.galleryUi).toBe(true);
+    const local = loadConfig({
+      ...baseEnvironment,
+      OPENBOT_GENERATE_THREAD_NAMES: "false",
+    });
+    expect(local.generateThreadNames).toBe(false);
+    expect(local.galleryUi).toBe(true);
+    expect(local.generativeUi).toBe(true);
+  });
+});

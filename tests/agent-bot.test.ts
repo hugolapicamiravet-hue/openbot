@@ -19,6 +19,8 @@ async function startBot(environment: Record<string, string>) {
         PATH: process.env.PATH ?? "",
         MANAGED_AGENT_TOKEN: "",
         OPENAI_API_KEY: "",
+        // A local endpoint makes the key optional; isolate the missing-key case from .env.
+        OPENAI_BASE_URL: "",
         ...environment,
       },
       stdout: "pipe",

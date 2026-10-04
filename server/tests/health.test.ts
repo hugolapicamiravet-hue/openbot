@@ -19,6 +19,16 @@ describe("health endpoint", () => {
 });
 
 describe("runtime capabilities", () => {
+  test("can omit optional gallery tools without disabling generative UI", async () => {
+    const configured = createApp(
+      loadConfig(testEnvironment({ OPENBOT_GALLERY_UI: "false" })),
+    );
+    const response = await configured.request("/api/capabilities");
+    expect(await response.json()).toMatchObject({
+      galleryUi: false,
+      generativeUi: true,
+    });
+  });
   test("reports transcription without exposing its endpoint, model, or key", async () => {
     const configured = createApp(
       loadConfig(
@@ -45,6 +55,7 @@ describe("runtime capabilities", () => {
       // Default-on. The browser reads this to decide whether to offer the tool that generates an
       // interface, so it has to be here and not only in the runtime.
       generativeUi: true,
+      galleryUi: true,
       transcription: false,
       voice: false,
       // Names only. The sign-in screen reads this to know which buttons to draw.
@@ -70,6 +81,7 @@ describe("runtime capabilities", () => {
       "mode",
       "durableHistory",
       "generativeUi",
+      "galleryUi",
       "transcription",
       "voice",
       "authProviders",

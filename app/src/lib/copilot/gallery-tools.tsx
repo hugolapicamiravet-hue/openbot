@@ -24,7 +24,7 @@ import {
  * Register compiled gallery components once per name, scoped to the active Bot with `available`.
  * Handlers still recheck grants at call time because a run's offered tool list is only a snapshot.
  */
-export function GalleryTools() {
+export function GalleryTools({ enabled = true }: { enabled?: boolean }) {
   const queryClient = useQueryClient();
   useEffect(() => {
     void announceGallery(galleryManifest()).then((added) => {
@@ -55,9 +55,15 @@ export function GalleryTools() {
     <>
       {GALLERY_COMPONENTS.map((spec) =>
         spec.kind === "decision" ? (
-          <GrantedDecision held={held} key={spec.name} spec={spec} />
+          <GrantedDecision
+            enabled={enabled}
+            held={held}
+            key={spec.name}
+            spec={spec}
+          />
         ) : (
           <GrantedTool
+            enabled={enabled}
             grantsFor={grantsFor}
             held={held}
             key={spec.name}
@@ -70,10 +76,12 @@ export function GalleryTools() {
 }
 
 function GrantedTool({
+  enabled,
   grantsFor,
   spec,
   held,
 }: {
+  enabled: boolean;
   grantsFor: string;
   spec: GalleryComponent;
   held: Map<string, string>;
@@ -138,7 +146,7 @@ function GrantedTool({
     description: description ?? spec.description,
     parameters: spec.parameters,
     // Keep the hook mounted and hide revoked grants from the model to preserve hook order.
-    available: isHeld,
+    available: isHeld && enabled,
     handler: async (
       args: Record<string, unknown>,
       context: { toolCall?: { id?: string } },
@@ -166,9 +174,11 @@ function GrantedTool({
 }
 
 function GrantedDecision({
+  enabled,
   spec,
   held,
 }: {
+  enabled: boolean;
   spec: GalleryComponent;
   held: Map<string, string>;
 }) {
@@ -197,7 +207,7 @@ function GrantedDecision({
     name: spec.name,
     description: description ?? spec.description,
     parameters: spec.parameters,
-    available: isHeld,
+    available: isHeld && enabled,
     render: Render,
   });
 

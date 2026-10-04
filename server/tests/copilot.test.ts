@@ -129,6 +129,27 @@ function expectWrappedHttpTransport(agent: unknown): HttpAgent {
 }
 
 describe("deployment model selection", () => {
+  test("explicit Ollama configuration wins over subscription credentials and needs no API key", () => {
+    const selected = runtimeModelForEnvironment(
+      { provider: "openai", defaultModel: "package-model" },
+      {
+        BOT_MODEL: "qwen3:14b",
+        OPENAI_BASE_URL: "http://localhost:11434/v1",
+        OPENBOT_OLLAMA_CONTEXT_LENGTH: "8192",
+        OPENBOT_OLLAMA_THINK: "false",
+        CLAUDE_CODE_OAUTH_TOKEN: "unused-subscription-fixture",
+      },
+    );
+    expect(selected.plan).toBeUndefined();
+    expect(selected.ollama?.modelId).toBe("qwen3:14b");
+    const configured = builtInAgentConfiguration(
+      { id: "local", name: "Local", type: "built_in", systemPrompt: "Hello" },
+      selected,
+      null,
+    );
+    expect(configured).toMatchObject({ model: selected.ollama });
+  });
+
   const packagePath = join(
     dirname(fileURLToPath(import.meta.url)),
     "../../examples/fintech",

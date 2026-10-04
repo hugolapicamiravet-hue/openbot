@@ -67,7 +67,7 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
         <HandoffTool />
         <EscalationTool />
         {/* Gallery tools are registered once; their handlers re-read the active Bot to avoid shadowing renderers. */}
-        <GalleryTools />
+        <GalleryTools enabled={capabilities?.galleryUi === true} />
         {/* Browser-authored components use the same component grants as the compiled gallery. */}
         <SandboxedTools />
         {/* Offered only on a Bot holding the skill-creator skill; see skill-tools.tsx. */}

@@ -301,6 +301,10 @@ export type DeploymentConfig = {
    * that must not reach the public internet from a browser tab needs to weigh.
    */
   generativeUi: boolean;
+  /** Offer compiled gallery frontend tools; headless runs and transcript renders are unchanged. */
+  galleryUi: boolean;
+  /** Optional title inference, independently configurable for local deployments. */
+  generateThreadNames: boolean;
   /**
    * Where the built app is, when this process serves it.
    *
@@ -1294,6 +1298,13 @@ export function loadConfig(
       singleUserAllowed(environment, configuredAuthProviders(auth).length > 0),
     accessibility: accessibilityEnabled(environment),
     generativeUi: generativeUiEnabled(environment),
+    galleryUi: !["false", "0"].includes(
+      optional(environment, "OPENBOT_GALLERY_UI")?.toLowerCase() ?? "",
+    ),
+    generateThreadNames: !["false", "0"].includes(
+      optional(environment, "OPENBOT_GENERATE_THREAD_NAMES")?.toLowerCase() ??
+        "",
+    ),
     ...(optional(environment, "APP_DIST_DIR")
       ? { appDistDir: optional(environment, "APP_DIST_DIR") as string }
       : {}),

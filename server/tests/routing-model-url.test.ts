@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import { chatCompletionsUrl } from "../src/routing/model";
+import { describe, expect, spyOn, test } from "bun:test";
+import { runtimeModelForEnvironment } from "../src/copilot";
+import { chatCompletionsUrl, createModelCompleter } from "../src/routing/model";
 
 /**
  * Where the deployment's own model calls go.
@@ -56,4 +57,47 @@ describe("chatCompletionsUrl", () => {
       chatCompletionsUrl({ OPENAI_BASE_URL: "https://x.test/v1beta" }),
     ).toBe("https://x.test/v1beta/v1/chat/completions");
   });
+});
+
+test("local router reuses Ollama context and thinking settings without a paid/key fallback", async () => {
+  const model = runtimeModelForEnvironment(
+    { provider: "openai", defaultModel: "qwen3:14b" },
+    {
+      OPENAI_BASE_URL: "http://localhost:11434/v1/",
+      OPENBOT_OLLAMA_CONTEXT_LENGTH: "8192",
+      OPENBOT_OLLAMA_THINK: "false",
+    },
+  );
+  let calls = 0;
+  const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+    async (url, init) => {
+      calls++;
+      expect(String(url)).toBe("http://localhost:11434/api/chat");
+      const body = JSON.parse(String(init?.body));
+      expect(body.options).toMatchObject({ num_ctx: 8192 });
+      expect(body.think).toBe(false);
+      expect(body.format).toBe("json");
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      return Response.json({
+        model: "qwen3:14b",
+        created_at: "2026-10-04T00:00:00Z",
+        message: { role: "assistant", content: '{"bot":"general"}' },
+        done: true,
+        done_reason: "stop",
+      });
+    },
+  );
+  const complete = createModelCompleter({
+    model,
+    resolveApiKey: async () => {
+      throw new Error("The local router must not resolve paid credentials.");
+    },
+  });
+  try {
+    expect(await complete("Choose a Bot.")).toBe('{"bot":"general"}');
+    await expect(complete("Cancelled", AbortSignal.abort())).rejects.toThrow();
+    expect(calls).toBe(1);
+  } finally {
+    fetchSpy.mockRestore();
+  }
 });

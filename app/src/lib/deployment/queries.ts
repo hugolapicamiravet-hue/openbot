@@ -18,6 +18,7 @@ export type DeploymentCapabilities = {
    * so both halves read this one answer.
    */
   generativeUi: boolean;
+  galleryUi?: boolean;
   transcription?: boolean;
   voice?: boolean;
 };
@@ -34,7 +35,8 @@ export const deploymentKeys = {
  * is built once and knows nothing about the deployment that will run it, so a capability compiled
  * into the bundle can only ever describe the build machine.
  *
- * Absent fields read as off. A server too old to answer, or one that failed to, is a server this app
+ * New capabilities absent from the response read as off. The compiled gallery predates this
+ * endpoint flag and remains enabled on older servers. A server too old to answer is one this app
  * should not assume a capability of — and for generated interfaces the fail-closed direction is the
  * safe one, because claiming it wrongly is what makes a Bot generate something nothing renders.
  */
@@ -55,12 +57,14 @@ export function deploymentCapabilitiesQueryOptions() {
         })
       ).json()) as {
         generativeUi?: boolean;
+        galleryUi?: boolean;
         transcription?: boolean;
         voice?: boolean;
       };
 
       return {
         generativeUi: body.generativeUi === true,
+        galleryUi: body.galleryUi !== false,
         transcription: body.transcription === true,
         voice: body.voice === true,
       };

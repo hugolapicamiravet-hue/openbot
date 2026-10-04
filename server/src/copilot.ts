@@ -52,6 +52,7 @@ import {
   type LoadPersonalMemory,
   PersonalMemoryMiddleware,
 } from "./memory/tools";
+import { ollamaModelForEnvironment } from "./ollama-model";
 import type { SelectableSkill, Selection } from "./plugins/selection";
 import {
   latestUserText,
@@ -182,6 +183,7 @@ export type RuntimeModel = {
   provider: "openai" | "anthropic";
   defaultModel: string;
   plan?: PlanModelConfig;
+  ollama?: ReturnType<typeof ollamaModelForEnvironment>;
 };
 
 /** Optional desktop environment values may be present but blank; SDKs treat them as URLs. */
@@ -226,11 +228,15 @@ export function runtimeModelForEnvironment(
     provider === "anthropic" ||
     ((!selectedProvider || selectedProvider === "openai") &&
       !!environment.OPENAI_BASE_URL?.trim());
-  return {
+  const selected = {
     provider,
-    plan: planModelForEnvironment(environment),
     defaultModel:
       selectedModelApplies && selectedModel ? selectedModel : defaultModel,
+  };
+  const ollama = ollamaModelForEnvironment(selected, environment);
+  return {
+    ...selected,
+    ...(ollama ? { ollama } : { plan: planModelForEnvironment(environment) }),
   };
 }
 
@@ -376,7 +382,7 @@ export function builtInAgentConfiguration(
   planModel?: PlanModel,
   learnedSkills?: LearnedSkillInvocation,
 ): BuiltInAgentConfiguration {
-  if (!apiKey && !planModel) {
+  if (!apiKey && !planModel && !model.ollama) {
     return {
       type: "custom",
       // biome-ignore lint/correctness/useYield: this agent must fail when iteration starts.
@@ -400,7 +406,8 @@ export function builtInAgentConfiguration(
   ];
 
   return {
-    model: planModel ?? `${model.provider}/${model.defaultModel}`,
+    model:
+      model.ollama ?? planModel ?? `${model.provider}/${model.defaultModel}`,
     /*
      * The package's role, then the person's own standing instructions, then what this Bot actually
      * holds, then the computer.
@@ -432,7 +439,7 @@ export function builtInAgentConfiguration(
       ...(computerGuidance ? [computerGuidance] : []),
       ...(learnedSkills?.catalog ? [learnedSkills.catalog] : []),
     ].join("\n\n"),
-    ...(planModel ? {} : { apiKey: apiKey ?? undefined }),
+    ...(model.ollama || planModel ? {} : { apiKey: apiKey ?? undefined }),
     /*
      * A run stops after one step unless told otherwise, which for a Bot with tools means it calls
      * one and never speaks: the tool executes, the result arrives, and the run ends before the model
@@ -2289,6 +2296,7 @@ export function mountCopilotRuntime(
     // See IntelligenceKnowingANewThread.
     intelligence: intelligenceClient,
     licenseToken: intelligence.licenseToken,
+    generateThreadNames: config.generateThreadNames,
     // Carried on the events the runtime already sends, so OpenBot's traffic is separable from any
     // other deployment's. Adds no events of its own.
     telemetryProperties: {
