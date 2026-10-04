@@ -61,7 +61,11 @@ import type { PageFrameStore } from "./computer/page-frames";
 import type { PolicyStore } from "./computer/policy-store";
 import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
-import type { CredentialAdminService, CredentialInput } from "./credentials";
+import {
+  type CredentialAdminService,
+  type CredentialInput,
+  CredentialRefusedError,
+} from "./credentials";
 import type { Database } from "./db/client";
 import { withoutStatement } from "./db/query-failure";
 import {
@@ -114,6 +118,7 @@ import { createRoutineRoutes, type RoutineStore } from "./routines/routes";
 import type { RoutineRunner } from "./routines/runner";
 import type { IntentRouter } from "./routing/classify";
 import { createRoutingRoutes } from "./routing/routes";
+import type { SelfHostBanner } from "./self-host-banner";
 import { createTeamBotRoutes } from "./team-bots/routes";
 import type { TeamBots } from "./team-bots/team-bots";
 import type { PackageStatusReader } from "./tenant-package";
@@ -409,6 +414,12 @@ export function createApp(
     /** Pause, reset, Activity and attention for a person's own Bots. See agents/lifecycle.ts. */
     lifecycle?: BotLifecycleServices;
   },
+  /**
+   * Whether to offer help self-hosting, which also hides it from a deployment that pays for
+   * Intelligence. Absent falls back to the operator's switch alone, so a test or a build without the
+   * resolver still answers from `config.selfHostBanner` rather than asking the network.
+   */
+  selfHostBanner?: SelfHostBanner,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
   mountDesktopConnectionFailure(app, desktopHostToken);
@@ -433,6 +444,11 @@ export function createApp(
        */
       generativeUi: config.generativeUi,
       galleryUi: config.galleryUi,
+      // Whether to offer help self-hosting OpenBot. A fork running it for its own people turns it off,
+      // and a deployment that pays for Intelligence never sees it. See self-host-banner.ts.
+      selfHostBanner: selfHostBanner
+        ? await selfHostBanner.shown()
+        : config.selfHostBanner,
       transcription: Boolean(config.transcription),
       voice: Boolean(config.voice),
       /*
@@ -1083,12 +1099,19 @@ export function createApp(
         return context.json({ error: "Credential input is invalid." }, 400);
       }
 
-      return context.json({
-        credential: await credentialService.rotate({
-          ...input,
-          previousCredentialId: context.req.param("credentialId"),
-        }),
-      });
+      try {
+        return context.json({
+          credential: await credentialService.rotate({
+            ...input,
+            previousCredentialId: context.req.param("credentialId"),
+          }),
+        });
+      } catch (error) {
+        if (error instanceof CredentialRefusedError) {
+          return context.json({ error: error.message }, error.status);
+        }
+        throw error;
+      }
     },
   );
   app.post(
@@ -1106,12 +1129,20 @@ export function createApp(
         );
       }
 
-      return context.json({
-        credential: await credentialService.revoke(
-          context.req.param("credentialId"),
-          context.var.actor.id,
-        ),
-      });
+      try {
+        return context.json({
+          credential: await credentialService.revoke(
+            context.req.param("credentialId"),
+            context.var.actor.id,
+          ),
+        });
+      } catch (error) {
+        // Not found or already revoked: the second click on Revoke, answered as what it is.
+        if (error instanceof CredentialRefusedError) {
+          return context.json({ error: error.message }, error.status);
+        }
+        throw error;
+      }
     },
   );
   app.get("/api/admin/package", requireUser, async (context) => {
@@ -1290,7 +1321,7 @@ export function createApp(
               reachableFrom: (agentId) =>
                 pluginStore.botsReachableFrom(agentId),
               // The same answer the write path checks, read up front so the screen can say it once.
-              runsHere: (agentId) => pluginStore.agentRunsHere(agentId),
+              canHandOn: (agentId) => pluginStore.agentCanHandOn(agentId),
             }
           : undefined,
         // Whether "built-in" is a kind of coworker this deployment can actually make: the create
@@ -1519,7 +1550,13 @@ export function createApp(
   if (componentStore) {
     app.route(
       "/api/components",
-      createComponentRoutes(componentStore, requireUser, auditStore, canUseBot),
+      createComponentRoutes(
+        componentStore,
+        requireUser,
+        auditStore,
+        canUseBot,
+        sandboxedStore,
+      ),
     );
   }
 

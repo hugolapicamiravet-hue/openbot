@@ -73,6 +73,7 @@ import {
   parseApprovalContinuation,
   parseApprovalResult,
 } from "./approvals/types";
+import { streamPathBotId } from "./computer/stream-path";
 import {
   type AuditInitiator,
   createAuditReader,
@@ -171,7 +172,11 @@ import {
   HostAccessRefusedError,
 } from "./host-access/broker";
 import { hostAccessTools } from "./host-access/tools";
-import { observeIntelligenceAuthentication } from "./intelligence-client";
+import {
+  createIntelligenceClient,
+  observeIntelligenceAuthentication,
+} from "./intelligence-client";
+import { createSelfHostBanner } from "./self-host-banner";
 import { clearLearningRevisionFallback } from "./learning/runtime";
 import { createLearningSettingsStore } from "./learning/settings";
 import { createMemoryIngestion } from "./memory/ingestion";
@@ -2858,6 +2863,12 @@ guardHostAccess(
 );
 auditRoutineStore(routineStore, bootAuditStore);
 
+// Asked only whether this deployment pays for Intelligence, for the self-host banner. Its own client
+// rather than the runtime's, the same as the thread reader: the constructor opens nothing.
+const selfHostBannerIntelligence = createIntelligenceClient(
+  config.runtime.intelligence,
+);
+
 const app = createApp(
   config,
   auth,
@@ -3037,6 +3048,10 @@ const app = createApp(
       auditStore: bootAuditStore,
     },
   },
+  createSelfHostBanner({
+    enabled: config.selfHostBanner,
+    entitlements: () => selfHostBannerIntelligence.getRuntimeEntitlements(),
+  }),
 );
 
 /**
@@ -3056,15 +3071,6 @@ const toStreamUrl = (baseUrl: string, botId: string) =>
   // same reason, this socket is the one a person can type into, so it is the last thing that should
   // be reachable without it.
   `${baseUrl.replace(/^http/, "ws").replace(/\/$/, "")}/stream?bot=${encodeURIComponent(botId)}&token=${encodeURIComponent(config.computer?.token ?? "")}`;
-
-/**
- * Which Bot's screen. The Bot is named in the path and its computer is located the same way every
- * other call locates it, so the live stream cannot point at a different Bot's browser.
- */
-const streamPathBotId = (pathname: string): string | null => {
-  const match = pathname.match(/^\/api\/computers\/([^/]+)\/stream$/);
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
-};
 
 /** What each proxied socket carries: where to connect inward, and the socket once opened. */
 type StreamData = {
